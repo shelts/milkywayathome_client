@@ -27,29 +27,74 @@ along with Milkyway@Home.  If not, see <http://www.gnu.org/licenses/>.
 #include "nbody_isotropic.h"
 
 /* pickshell: pick a random point on a sphere of specified radius. */
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*changed july 22, 2014- SS*/
+/*
+*   SS- I changed this section to be in compliance with NEMO's initialization technique.
+*   Instead of assigning it a point on sphere, assigns angles. Allows for non-circular orbits.
+*
+*/
 static inline mwvector pickShell(dsfmt_t* dsfmtState, real rad)
 {
     real rsq, rsc;
     mwvector vec;
+    real phi, theta;
 
-    do                      /* pick point in NDIM-space */
-    {
-        vec = mwRandomUnitPoint(dsfmtState);
-        rsq = mw_sqrv(vec);         /* compute radius squared */
-    }
-    while (rsq > 1.0);              /* reject if outside sphere */
+/*I commented out what used to be there before for reference*/
+//        do                      /* pick point in NDIM-space */
+//    {
+//        vec = mwRandomUnitPoint(dsfmtState);
+//        rsq = mw_sqrv(vec);         /* compute radius squared */
+//    }
+//    while (rsq > 1.0);              /* reject if outside sphere */
+//
+//    rsc = rad / mw_sqrt(rsq);       /* compute scaling factor */
+//    mw_incmulvs(vec, rsc);          /* rescale to radius given */
 
+    /*defining some angles*/
+    theta= mw_acos( mwXrandom(dsfmtState, -1.0, 1.0) );
+    phi=   mwXrandom( dsfmtState, 0.0, 2*M_PI );
+
+    /*this is standard formula for x,y,z components in spherical*/
+    vec.x= rad*sin( theta )*cos( phi );    /*x component*/
+    vec.y= rad*sin( theta )*sin( phi );    /*y component*/
+    vec.z= rad*cos( theta );               /*z component*/
+
+    rsq = mw_sqrv(vec);             /* compute radius squared */
     rsc = rad / mw_sqrt(rsq);       /* compute scaling factor */
     mw_incmulvs(vec, rsc);          /* rescale to radius given */
 
     return vec;
 }
 
+/*
+*   SS-This code snippet is from nbody_plummer.c.
+*   This is a probability distribution which is used in NEMO.
+*   The parameter that is returned is a fraction that is used to sample the velocity.
+*   See Aarseth et al. (1974), eq. (A4,5).
+*/
+static inline real plummerSelectFromG(dsfmt_t* dsfmtState)
+{
+
+    real x, y;
+
+    do                      /* select from fn g(x) */
+    {
+        x = mwXrandom(dsfmtState, 0.0, 1.0);      /* for x in range 0:1 */
+        y = mwXrandom(dsfmtState, 0.0, 0.1);      /* max of g(x) is 0.092 */
+    }   /* using von Neumann tech */
+    while (y > x*x * mw_pow(1.0 - x*x, 3.5));
+
+    return x;
+}
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 static inline real isotropicRandomR(dsfmt_t* dsfmtState, real scaleRad1, real scaleRad2,
 				    real Mass1, real Mass2)
 {
   // Rejection sampling radius generation
-  real RHO_MAX = 3/(4*M_PI) * (Mass1/(mw_pow(scaleRad1,3)) + Mass2/(mw_pow(scaleRad2,3)));
+  real RHO_MAX = 3/(4*M_PI) * (Mass1/(mw_pow(scaleRad1,3)) + Mass2/(mw_pow(scaleRad2,3)));nbody_isotropic.h
   mwbool GOOD_RADIUS = 0;
   // Arbitrarily define sample range to be [0, 5(a1 + a2)
 
@@ -60,9 +105,9 @@ static inline real isotropicRandomR(dsfmt_t* dsfmtState, real scaleRad1, real sc
       r = mwXrandom(dsfmtState,0.0, 3*(scaleRad1 + scaleRad2));
       real u = (real)mwXrandom(dsfmtState,0.0,1.0);
 
-      real val = 3/(4*M_PI)*(Mass1/(mw_pow(scaleRad1,3)) *mw_pow(1 + mw_pow(r,2)/mw_pow(scaleRad1,2),-5/2) + 
+      real val = 3/(4*M_PI)*(Mass1/(mw_pow(scaleRad1,3)) *mw_pow(1 + mw_pow(r,2)/mw_pow(scaleRad1,2),-5/2) +
 			     Mass2/(mw_pow(scaleRad2,3))*mw_pow(1 + mw_pow(r,2)/mw_pow(scaleRad2,2),-5/2));
-      
+
       if (val/RHO_MAX > u)
       {
        	GOOD_RADIUS = 1;
@@ -71,18 +116,26 @@ static inline real isotropicRandomR(dsfmt_t* dsfmtState, real scaleRad1, real sc
   return r;
 }
 
-
-
-static inline real isotropicRandomV(real r, real scaleRad1, real scaleRad2,                                                                                                             				    real Mass1, real Mass2)  
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*changed july 22, 2014- SS*/
+/*
+*   SS- added the x value. This is a parameter that is used to sample the velocity.
+*   Though, the distribution function was originally used for one plummer sphere.
+*   We have two here. Though I think the distribution function can still be used.
+*/
+static inline real isotropicRandomV(real r, real scaleRad1, real scaleRad2, real Mass1, real Mass2)
 {
 
 
-  real val;
-  val = mw_sqrt(Mass1/mw_sqrt(mw_pow(r,2) + mw_pow(scaleRad1,2)) 
+    real val;
+    real x;
+    x= plummerSelectFromG(dsfmtState);
+    val = x*M_SQRT2* mw_sqrt(Mass1/mw_sqrt(mw_pow(r,2) + mw_pow(scaleRad1,2))
 		+ Mass2/mw_sqrt(mw_pow(r,2) + mw_pow(scaleRad2,2)));
 
   return val;
 }
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static inline mwvector isotropicBodyPosition(dsfmt_t* dsfmtState, mwvector rshift,  real r)
 {
@@ -120,7 +173,7 @@ static int nbGenerateIsotropicCore(lua_State* luaSt,
 				   real mass2,
 
 				   mwbool ignore,
-				   
+
 				   mwvector rShift,
 				   mwvector vShift,
 				   real radiusScale1,
@@ -142,7 +195,7 @@ static int nbGenerateIsotropicCore(lua_State* luaSt,
 
     lua_createtable(luaSt, nbody, 0);
     table = lua_gettop(luaSt);
-    
+
     for (i = 0; i < nbody; ++i)
     {
         do
@@ -157,7 +210,7 @@ static int nbGenerateIsotropicCore(lua_State* luaSt,
         b.bodynode.pos = isotropicBodyPosition(prng, rShift, r);
 
         b.vel = isotropicBodyVelocity(prng, r, vShift, velScale, radiusScale1, radiusScale2, mass1, mass2);
-	
+
         assert(nbPositionValid(b.bodynode.pos));
 
         pushBody(luaSt, &b);
@@ -181,7 +234,7 @@ int nbGenerateIsotropic(lua_State* luaSt)
         {
 	  { "nbody",        LUA_TNUMBER,   NULL,          TRUE,  &nbodyf      },
 	  { "mass1",        LUA_TNUMBER,   NULL,          TRUE,  &mass1       },
-          { "mass2",        LUA_TNUMBER,   NULL,          TRUE,  &mass2       },
+      { "mass2",        LUA_TNUMBER,   NULL,          TRUE,  &mass2       },
 	  { "scaleRadius1", LUA_TNUMBER,   NULL,          TRUE,  &radiusScale1},
 	  { "scaleRadius2", LUA_TNUMBER,   NULL,          TRUE,  &radiusScale2},
 	  { "position",     LUA_TUSERDATA, MWVECTOR_TYPE, TRUE,  &position    },
@@ -204,4 +257,5 @@ void registerGenerateIsotropic(lua_State* luaSt)
 {
     lua_register(luaSt, "generateIsotropic", nbGenerateIsotropic);
 }
+
 
