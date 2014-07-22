@@ -94,7 +94,7 @@ static inline real isotropicRandomR(dsfmt_t* dsfmtState, real scaleRad1, real sc
 				    real Mass1, real Mass2)
 {
   // Rejection sampling radius generation
-  real RHO_MAX = 3/(4*M_PI) * (Mass1/(mw_pow(scaleRad1,3)) + Mass2/(mw_pow(scaleRad2,3)));nbody_isotropic.h
+  real RHO_MAX = 3/(4*M_PI) * (Mass1/(mw_pow(scaleRad1,3)) + Mass2/(mw_pow(scaleRad2,3)));
   mwbool GOOD_RADIUS = 0;
   // Arbitrarily define sample range to be [0, 5(a1 + a2)
 
@@ -123,7 +123,7 @@ static inline real isotropicRandomR(dsfmt_t* dsfmtState, real scaleRad1, real sc
 *   Though, the distribution function was originally used for one plummer sphere.
 *   We have two here. Though I think the distribution function can still be used.
 */
-static inline real isotropicRandomV(real r, real scaleRad1, real scaleRad2, real Mass1, real Mass2)
+static inline real isotropicRandomV(dsfmt_t* dsfmtState,real r, real scaleRad1, real scaleRad2, real Mass1, real Mass2)
 {
 
 
@@ -153,7 +153,7 @@ static inline mwvector isotropicBodyVelocity(dsfmt_t* dsfmtState,real r, mwvecto
     mwvector vel;
     real v;
 
-    v = isotropicRandomV(r,scaleRad1,scaleRad2,Mass1,Mass2);
+    v = isotropicRandomV(dsfmtState,r,scaleRad1,scaleRad2,Mass1,Mass2);
     vel = pickShell(dsfmtState, vsc * v);   /* pick scaled velocity */
     mw_incaddv(vel, vshift);                /* move the velocity */
 
